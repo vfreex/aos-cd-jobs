@@ -10,7 +10,7 @@ def stageVersions() {
     sh "elliott --version"
 }
 
-def stageValidation(quay_url, name, advisory) {
+def stageValidation(quay_url, name, advisory, version) {
     echo "Verifying payload does not already exist"
     res = commonlib.shell(
             returnAll: true,
@@ -21,18 +21,46 @@ def stageValidation(quay_url, name, advisory) {
         error("Payload ${name} already exists! Cannot continue.")
     }
 
-    // AMH - This may be optional?
-    if (advisory != "") {
+    if (!advisory) {
+        echo "Getting current advisory for OCP $version from build data..."
+        res = withEnv(["_VERSION=$version"]) {
+            commonlib.shell(
+                returnAll: true,
+                script: 'elliott --group=openshift-"${_VERSION}" get --json - --use-default-advisory image'
+            )
+        }
+        if(res.returnStatus != 0) {
+            error("Advisory for OCP $version couldn't be found from build data.")
+        }
+    } else {
         echo "Verifying advisory exists"
         res = commonlib.shell(
                 returnAll: true,
-                script: "elliott get ${advisory}"
+                script: "elliott --group=openshift-4.1 get ${advisory}" // the `--group` option here doesn't matter
         )
 
         if(res.returnStatus != 0){
             error("Advisory ${advisory} does not exist! Cannot continue.")
         }
     }
+
+    echo "yuxzhu: res = ${res}"
+    echo "Verifying advisory status"
+    def advisoryInfo = readJSON text: res.stdout
+    if (advisoryInfo.status != 'QE') {
+        error("Advisory ${advisory} is not in QE state.")
+    }
+
+    // FIXME: Not sure if this is a stable way to retrieve the live ID of the advisory.
+    // If the advisory has a live ID assigned, let's say RHBA-2019:2547,
+    // advisoryInfo.errata_id should be 2547 and advisoryInfo.fulladvisory be RHBA-2019:2547
+    // while advisoryInfo.id remains the old internal advisory ID.
+    if (advisoryInfo.errata_id != advisoryInfo.id && advisoryInfo.fulladvisory) {
+        echo "ERRATA_URL=https://access.redhat.com/errata/${advisoryInfo.fulladvisory}"
+        if (!env.ERRATA_URL)
+            env.ERRATA_URL="https://access.redhat.com/errata/${advisoryInfo.fulladvisory}"
+    }
+
 }
 
 def stageGenPayload(quay_url, name, from_release_tag, description, previous, errata_url) {
