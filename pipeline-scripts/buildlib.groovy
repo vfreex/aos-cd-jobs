@@ -10,16 +10,16 @@ ciKubeconfig = "/home/jenkins/kubeconfigs/art-publish.kubeconfig"
 GITHUB_URLS = [:]
 GITHUB_BASE_PATHS = [:]
 
-def initialize(test=false, checkMock=true) {
+def initialize(test=true, checkMock=true) {
     if (checkMock) {
         commonlib.checkMock()
     }
 
     // don't bother logging into a registry or getting a krb5 ticket for tests
-    if (!test) {
-        this.registry_login()
-        this.kinit()
-    }
+    // if (!test) {
+    //     this.registry_login()
+    //     this.kinit()
+    // }
     this.path_setup()
 
     GITHUB_URLS = [:]
