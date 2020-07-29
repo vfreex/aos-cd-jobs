@@ -1517,7 +1517,7 @@ def buildBuildingPlashet(version, release, el_major, include_embargoed, auto_sig
 
     // So we have a yum repo out on rcm-guest. Now we need to name it 'building' so the
     // doozer repo files (which have static urls back to rcm-guest) will resolve.
-    def symlink = include_embargoed? "building" : "building-embargoed"
+    def symlink = include_embargoed? "building-embargoed" : "building"
     commonlib.shell("ssh -t ocp-build@rcm-guest \"cd ${destBaseDir}; ln -sfn ${plashetDirName} ${symlink}\" ")
     return r
 }
