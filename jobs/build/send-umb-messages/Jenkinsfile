@@ -57,38 +57,38 @@ node {
                     )
                     latestRelease = readJSON text: response.content
                     latestReleaseVersion = latestRelease.name
-                    echo "${releaseStream}: latestRelease=${latestRelease}"
+                    echo "${key}: latestRelease=${latestRelease}"
                     try {
-                        previousRelease = readJSON(file: "${releaseStream}.current")
-                        echo "${releaseStream}: previousRelease=${previousRelease}"
+                        previousRelease = readJSON(file: "${key}.current")
+                        echo "${key}: previousRelease=${previousRelease}"
                     } catch (readex) {
                         // The first time this job is ran and the first
                         // time any new release is added the 'readFile'
                         // won't find the file and will raise a
                         // NoSuchFileException exception.
-                        echo "${releaseStream}: Error reading revious release: ${readex}"
-                        touch file: "${releaseStream}.current"
-                        previousRelease = {}
+                        echo "${key}: Error reading previous release: ${readex}"
+                        touch file: "${key}.current"
+                        previousRelease = [:]
                     }
 
                     if ( latestRelease != previousRelease ) {
                         def previousReleaseVersion = "0.0.0"
                         if (previousRelease)
                             previousReleaseVersion = previousRelease.name
-                        currentBuild.displayName += "🆕 ${releaseStream}: ${previousReleaseVersion} -> ${latestReleaseVersion}"
-                        currentBuild.description += "\n🆕 ${releaseStream}: ${previousReleaseVersion} -> ${latestReleaseVersion}"
+                        currentBuild.displayName += "🆕 ${key}: ${previousReleaseVersion} -> ${latestReleaseVersion}"
+                        currentBuild.description += "\n🆕 ${key}: ${previousReleaseVersion} -> ${latestReleaseVersion}"
                         release.sendPreReleaseMessage(latestRelease, releaseStream, "Red Hat UMB (stage)")
-                        writeJSON file: "${releaseStream}.current", json: latestRelease
+                        writeJSON file: "${key}.current", json: latestRelease
                     } else {
-                        currentBuild.description += "\nUnchanged: ${releaseStream}"
+                        currentBuild.description += "\nUnchanged: ${key}"
                     }
                 } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException ex) {
                     // don't try to recover from cancel
                     throw ex
                 } catch (ex) {
                     // but do tolerate other per-release errors
-                    echo "Error during release ${release}: ${ex}"
-                    currentBuild.description += "\nFailed: ${release}"
+                    echo "Error during release ${key}: ${ex}"
+                    currentBuild.description += "\nFailed: ${key}"
                 }
             }
         }
