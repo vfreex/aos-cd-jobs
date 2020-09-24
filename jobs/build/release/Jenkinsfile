@@ -108,6 +108,11 @@ node {
                         description: 'Do not gather an advisory image list for docs. Use this for RCs and other test situations.',
                         defaultValue: false,
                     ),
+                    booleanParam(
+                        name: 'BYPASS_RHCOS_VALIDATION',
+                        description: 'DO NOT USE without team lead approval. Use this to bypass RHCOS validations.',
+                        defaultValue: false,
+                    ),
                     string(
                         name: 'MAIL_LIST_SUCCESS',
                         description: 'Success Mailing List',
@@ -274,7 +279,7 @@ node {
                 advisory = advisory?:retval.advisoryInfo.id
                 errata_url = retval.errataUrl
             }
-            stage("build payload") { release.stageGenPayload(quay_url, release_name, dest_release_tag, from_release_tag, description, previousList.join(','), errata_url) }
+            stage("build payload") { release.stageGenPayload(quay_url, release_name, dest_release_tag, from_release_tag, description, previousList.join(','), errata_url, params.BYPASS_RHCOS_VALIDATION) }
 
             stage("tag stable") {
                 if (!is_4stable_release) {

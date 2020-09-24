@@ -130,7 +130,7 @@ def getArchPrivSuffix(arch, priv) {
     return suffix
 }
 
-def stageGenPayload(dest_repo, release_name, dest_release_tag, from_release_tag, description, previous, errata_url) {
+def stageGenPayload(dest_repo, release_name, dest_release_tag, from_release_tag, description, previous, errata_url, bypass_rhcos_validation=false) {
     // build metadata blob
 
     def metadata = ''
@@ -152,9 +152,21 @@ def stageGenPayload(dest_repo, release_name, dest_release_tag, from_release_tag,
     def suffix = getArchPrivSuffix(arch, priv)
     def publicSuffix = getArchPrivSuffix(arch, false)
 
+    def from_pullspec = "registry.svc.ci.openshift.org/ocp${suffix}/release${suffix}:${from_release_tag}"
+
+    if (!bypass_rhcos_validation) {
+        def result = buildlib.doozer("--working-dir ${env.WORKSPACE}/doozer_working release:validate-rhcos ${from_pullspec}", returnAll: true)
+        if (result.returnStatus == 2) {
+            error("RHCOS in ${from_pullspec} is not in the AWS bucket. See https://github.com/openshift/art-docs/blob/master/4.y.z-stream.md#managing-exceptions-to-the-process for more information.")
+        }
+        else if (result.returnStatus != 0) {
+            error("Error running Doozer: ${result.combined}")
+        }
+    }
+
     // build oc command
     def cmd = "GOTRACEBACK=all ${oc_cmd} adm release new "
-    cmd += "-n ocp${publicSuffix} --from-release=registry.svc.ci.openshift.org/ocp${suffix}/release${suffix}:${from_release_tag} "
+    cmd += "-n ocp${publicSuffix} --from-release=${from_pullspec} "
     if (previous != "") {
         cmd += "--previous \"${previous}\" "
     }
