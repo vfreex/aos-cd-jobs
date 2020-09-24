@@ -275,11 +275,11 @@ node {
                     errata_url = ''
                     return
                 }
-                def retval = release.stageValidation(from_release_tag, quay_url, dest_release_tag, advisory, params.PERMIT_PAYLOAD_OVERWRITE, params.PERMIT_ALL_ADVISORY_STATES)
+                def retval = release.stageValidation(quay_url, dest_release_tag, advisory, params.PERMIT_PAYLOAD_OVERWRITE, params.PERMIT_ALL_ADVISORY_STATES)
                 advisory = advisory?:retval.advisoryInfo.id
                 errata_url = retval.errataUrl
             }
-            stage("build payload") { release.stageGenPayload(quay_url, release_name, dest_release_tag, from_release_tag, description, previousList.join(','), errata_url) }
+            stage("build payload") { release.stageGenPayload(quay_url, release_name, dest_release_tag, from_release_tag, description, previousList.join(','), errata_url, params.BYPASS_RHCOS_VALIDATION) }
 
             stage("tag stable") {
                 if (!is_4stable_release) {

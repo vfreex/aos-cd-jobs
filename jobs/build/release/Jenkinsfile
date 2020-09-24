@@ -269,15 +269,17 @@ node {
             buildlib.registry_quay_dev_login()
             stage("versions") { release.stageVersions() }
             stage("validation") {
-                if (direct_release_nightly) {
-                    // No advisory dance
-                    advisory = -1
-                    errata_url = ''
-                    return
-                }
-                def retval = release.stageValidation(quay_url, dest_release_tag, advisory, params.PERMIT_PAYLOAD_OVERWRITE, params.PERMIT_ALL_ADVISORY_STATES)
-                advisory = advisory?:retval.advisoryInfo.id
-                errata_url = retval.errataUrl
+                // if (direct_release_nightly) {
+                //     // No advisory dance
+                //     advisory = -1
+                //     errata_url = ''
+                //     return
+                // }
+                // def retval = release.stageValidation(quay_url, dest_release_tag, advisory, params.PERMIT_PAYLOAD_OVERWRITE, params.PERMIT_ALL_ADVISORY_STATES)
+                // advisory = advisory?:retval.advisoryInfo.id
+                // errata_url = retval.errataUrl
+                advisory = 0
+                errata_url = "https://example.com"
             }
             stage("build payload") { release.stageGenPayload(quay_url, release_name, dest_release_tag, from_release_tag, description, previousList.join(','), errata_url, params.BYPASS_RHCOS_VALIDATION) }
 
