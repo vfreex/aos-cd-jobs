@@ -38,7 +38,7 @@ rpmMirror = [       // how to mirror RPM compose
  * @return map which is the buildPlan property of this build.
 */
 def initialize() {
-    //buildlib.cleanWorkdir(doozerWorking)
+    // buildlib.cleanWorkdir(doozerWorking)
     buildlib.initialize()
     GITHUB_BASE = "git@github.com:openshift"  // buildlib uses this :eyeroll:
 

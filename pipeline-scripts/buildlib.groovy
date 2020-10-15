@@ -16,10 +16,10 @@ def initialize(test=false, checkMock=true) {
     }
 
     // don't bother logging into a registry or getting a krb5 ticket for tests
-    if (!test) {
-        this.registry_login()
-        this.kinit()
-    }
+    // if (!test) {
+    //     this.registry_login()
+    //     this.kinit()
+    // }
     this.path_setup()
 
     GITHUB_URLS = [:]
