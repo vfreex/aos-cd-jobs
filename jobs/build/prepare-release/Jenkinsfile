@@ -1,0 +1,63 @@
+node {
+    wrap([$class: "BuildUser"]) {
+        checkout scm
+        def lib = load("advisories.groovy")
+        def buildlib = lib.buildlib
+        def commonlib = lib.commonlib
+
+        def dateFormat = new SimpleDateFormat("yyyy-MMM-dd")
+        def date = new Date()
+
+        commonlib.describeJob("prepare-release", """
+            <h2>This job will perform an assortment of release tasks for creating a release from scratch.</h2>
+            <b>Timing</b>: On the prepare-the-release day (Monday).
+        """)
+
+        properties(
+            [
+                disableResume(),
+                buildDiscarder(
+                    logRotator(
+                        artifactDaysToKeepStr: "",
+                        artifactNumToKeepStr: "",
+                        daysToKeepStr: "",
+                        numToKeepStr: "")),
+                [
+                    $class: "ParametersDefinitionProperty",
+                    parameterDefinitions: [
+                        string(
+                            name: "NAME",
+                            description: "The expected release name (e.g. 4.6.42)",
+                            trim: true
+                        ),
+                        string(
+                            name: "DATE",
+                            description: "Intended release date. Format: YYYY-Mon-dd (example: 2050-Jan-01)",
+                            defaultValue: "${dateFormat.format(date)}",
+                            trim: true
+                        ),
+                        string(
+                            name: "NIGHTLIES",
+                            description: "list of proposed nightlies for each arch, separated by comma",
+                            trim: true
+                        ),
+                        string(
+                            name: "PACKAGE_OWNER",
+                            description: "Must be an individual email address; may be anyone who wants random advisory spam",
+                            defaultValue: "lmeyer@redhat.com",
+                            trim: true
+                        ),
+                        booleanParam(
+                            name: "DRY_RUN",
+                            description: "Take no action, just echo what the job would have done.",
+                            defaultValue: false
+                        ),
+                        commonlib.mockParam(),
+                    ]
+                ],
+            ]
+        )   // Please update README.md if modifying parameter names or semantics
+
+        commonlib.checkMock()
+    }
+}
