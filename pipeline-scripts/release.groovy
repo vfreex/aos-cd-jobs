@@ -398,6 +398,50 @@ for f in *.tar.gz *.bz *.zip *.tgz ; do
     fi
 done
         ''')
+        withEnv(["OUTDIR=$CLIENT_MIRROR_DIR", "PULL_SPEC=${quay_url}:${from_release_tag}", "ARCH=$arch"]){
+            commonlib.shell('''
+function extract_opm() {
+    OUTDIR=$1
+    mkdir -p "${OUTDIR}"
+    OPERATOR_REGISTRY=$(oc adm release info --image-for operator-registry "$PULL_SPEC")
+    # extract opm binaries
+    BINARIES=(opm)
+    PLATFORMS=(linux)
+    if [ "$ARCH" == "x86_64" ]; then  # For x86_64, we have binaries for macOS and Windows
+        BINARIES+=(darwin-amd64-opm windows-amd64-opm)
+        PLATFORMS+=(mac windows)
+    fi
+
+    MAJOR=$(echo "$VERSION" | cut -d . -f 1)
+    MINOR=$(echo "$VERSION" | cut -d . -f 2)
+    if [ "$MAJOR" -eq 4 ] && [ "$MINOR" -le 6 ]; then
+        PREFIX=/usr/bin
+    else  # for 4.7+, opm binaries are at /usr/bin/registry/
+        PREFIX=/usr/bin/registry
+    fi
+
+    PATH_ARGS=()
+    for binary in ${BINARIES[@]}; do
+        PATH_ARGS+=(--path "$PREFIX/$binary:$OUTDIR")
+    done
+
+    GOTRACEBACK=all oc -v5 image extract --confirm --only-files "${PATH_ARGS[@]}" -- "$OPERATOR_REGISTRY"
+
+    # Compress binaries into tar.gz files and calculate sha256 digests
+    pushd "$OUTDIR"
+    for idx in ${!BINARIES[@]}; do
+        binary=${BINARIES[idx]}
+        platform=${PLATFORMS[idx]}
+        chmod +x "$binary"
+        tar -czvf "opm-$platform-$VERSION.tar.gz" "$binary"
+        rm "$binary"
+        ln -sf "opm-$platform-$VERSION.tar.gz" "opm-$platform.tar.gz"
+        sha256sum "opm-$platform-$VERSION.tar.gz" >> sha256sum.txt
+    done
+    popd
+}
+extract_opm "$OUTDIR"
+            ''')
     } else {
         echo "Would have run: ${tools_extract_cmd}"
     }
@@ -578,6 +622,19 @@ def signArtifacts(Map signingParams) {
         ]
     )
 }
+
+def ocSync(Map syncingParams) {
+    build(
+        job: "build%252Foc_sync",
+        propagate: true,
+        parameters: [
+            string(name: "RELEASE_NAME", value: syncingParams.release_name),
+            string(name: "ARCH", value: syncingParams.arch),
+            string(name: "CLIENT_TYPE", value: syncingParams.client_type),
+        ]
+    )
+}
+
 
 def isSupportEUS(ocpVersion) {
   return ocpVersion in commonlib.eusVersions
