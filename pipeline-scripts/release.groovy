@@ -371,7 +371,7 @@ def stagePublishClient(quay_url, from_release_tag, release_name, arch, client_ty
     def tools_extract_cmd = "MOBY_DISABLE_PIGZ=true GOTRACEBACK=all oc adm release extract --tools --command-os='*' -n ocp " +
                                 " --to=${CLIENT_MIRROR_DIR} --from ${quay_url}:${from_release_tag}"
 
-    if (!params.DRY_RUN) {
+    // if (!params.DRY_RUN) {
         commonlib.shell(script: tools_extract_cmd)
         commonlib.shell("cd ${CLIENT_MIRROR_DIR}\n" + '''
 # External consumers want a link they can rely on.. e.g. .../latest/openshift-client-linux.tgz .
@@ -398,7 +398,7 @@ for f in *.tar.gz *.bz *.zip *.tgz ; do
     fi
 done
         ''')
-        withEnv(["OUTDIR=$CLIENT_MIRROR_DIR", "PULL_SPEC=${quay_url}:${from_release_tag}", "ARCH=$arch"]){
+        withEnv(["OUTDIR=$CLIENT_MIRROR_DIR", "PULL_SPEC=${quay_url}:${from_release_tag}", "ARCH=$arch", "VERSION=$release_name"]){
             commonlib.shell('''
 function extract_opm() {
     OUTDIR=$1
@@ -442,9 +442,12 @@ function extract_opm() {
 }
 extract_opm "$OUTDIR"
             ''')
-    } else {
-        echo "Would have run: ${tools_extract_cmd}"
-    }
+        sh "tree $CLIENT_MIRROR_DIR"
+        sh "cat $CLIENT_MIRROR_DIR/sha256sum.txt"
+        }
+    // } else {
+    //     echo "Would have run: ${tools_extract_cmd}"
+    // }
 
     // DO NOT use --delete. We only built a part of openshift-v4 locally and don't want to remove
     // anything on the mirror.
