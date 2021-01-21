@@ -95,20 +95,24 @@ node {
                         commonlib.shell "./publish-clients-from-payload.sh ${env.WORKSPACE} ${params.RELEASE_NAME} ${params.CLIENT_TYPE} '${pull_spec}'"
                     }
                 }
-                slacklib.to(ocpVersion).say("""
-                ${params.DRY_RUN? '[DRY RUN]' : ''}*:heavy_check_mark: oc_sync successful*
-                https://mirror.openshift.com/pub/openshift-v4/${params.ARCH}/clients/${params.CLIENT_TYPE}/${params.RELEASE_NAME}/
+                if (!params.DRY_RUN) {
+                    slacklib.to(ocpVersion).say("""
+                    *:heavy_check_mark: oc_sync successful*
+                    https://mirror.openshift.com/pub/openshift-v4/${params.ARCH}/clients/${params.CLIENT_TYPE}/${params.RELEASE_NAME}/
 
-                buildvm job: ${commonlib.buildURL('console')}
-                """)
+                    buildvm job: ${commonlib.buildURL('console')}
+                    """)
+                }
             }
         }
     } catch (err) {
         def buildURL = env.BUILD_URL.replace('https://buildvm.openshift.eng.bos.redhat.com:8443', 'https://localhost:8888')
-        slacklib.to(ocpVersion).say("""
-        ${params.DRY_RUN? '[DRY RUN]' : ''}*:heavy_exclamation_mark: oc_sync failed*
-        buildvm job: ${commonlib.buildURL('console')}
-        """)
+        if (!params.DRY_RUN) {
+            slacklib.to(ocpVersion).say("""
+            *:heavy_exclamation_mark: oc_sync failed*
+            buildvm job: ${commonlib.buildURL('console')}
+            """)
+        }
         commonlib.email(
             to: "${params.MAIL_LIST_FAILURE}",
             from: "aos-art-automation@redhat.com",

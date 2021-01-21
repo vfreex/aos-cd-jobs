@@ -442,6 +442,7 @@ function extract_opm() {
 }
 extract_opm "$OUTDIR"
             ''')
+        }
     } else {
         echo "Would have run: ${tools_extract_cmd}"
     }
