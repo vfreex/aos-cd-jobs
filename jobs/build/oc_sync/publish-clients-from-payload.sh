@@ -25,14 +25,14 @@ OC_MIRROR_DIR="/srv/pub/openshift-v4/${ARCH}/clients/${CLIENT_TYPE}"
 
 SSH_OPTS="-l jenkins_aos_cd_bot -o StrictHostKeychecking=no use-mirror-upload.ops.rhcloud.com"
 
-#check if already exists
-if ssh ${SSH_OPTS} "[ -d ${OC_MIRROR_DIR}/${VERSION} ]";
-then
-    echo "Already have latest version"
-    exit 0
-else
-    echo "Fetching OCP clients from payload ${VERSION}"
-fi
+# #check if already exists
+# if ssh ${SSH_OPTS} "[ -d ${OC_MIRROR_DIR}/${VERSION} ]";
+# then
+#     echo "Already have latest version"
+#     exit 0
+# else
+#     echo "Fetching OCP clients from payload ${VERSION}"
+# fi
 
 function extract_tools() {
     OUTDIR=$1
@@ -114,6 +114,7 @@ ocp|ocp-dev-preview)
     OUTDIR=${WORKSPACE}/tools/${VERSION}
     extract_tools "$OUTDIR"
     extract_opm "$OUTDIR"
+    tree "$OUTDIR"
     ;;
 *)
     >&2 echo "Unknown CLIENT_TYPE: $CLIENT_TYPE"
