@@ -1,0 +1,36 @@
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: run-update-pipelines-on-merge-binding
+spec:
+  params:
+  - name: git-revision
+    value: $(body.pull_request.head.sha)
+  - name: repo-full-name
+    value: $(body.repository.full_name)
+  - name: pr-number
+    value: $(body.number)
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: run-update-pipelines-on-merge-template
+spec:
+  params:
+  - name: repo-full-name
+  - name: git-revision
+  - name: pr-number
+  resourcetemplates:
+  - apiVersion: tekton.dev/v1beta1
+    kind: PipelineRun
+    metadata:
+      generateName: update-pipelines-on-merge-
+    spec:
+      pipelineRef:
+        name: update-pipelines
+      params:
+      - name: repo-url
+        value: https://github.com/$(params.repo-full-name)
+      - name: revision
+        value: $(params.git-revision)

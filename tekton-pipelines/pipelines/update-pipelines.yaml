@@ -1,0 +1,61 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: update-pipelines
+  labels:
+    app: "artcd"
+spec:
+  description: |
+    update-pipelines takes a aos-cd-jobs git repository and a branch name and
+    applies Tekton pipeline resources from that branch.
+  params:
+  - name: repo-url
+    type: string
+    description: The git repository URL to clone from.
+    default: https://github.com/openshift/aos-cd-jobs.git
+  - name: revision
+    type: string
+    description: The git branch (tag, commit) to clone.
+    default: master
+  workspaces:
+  - name: ws
+    description: default workspace for sharing data between tasks
+  tasks:
+  - name: update-pipelines
+    taskRef:
+      name: update-pipelines
+    workspaces:
+    - name: ws
+      workspace: ws
+    params:
+    - name: repo-url
+      value: $(params.repo-url)
+    - name: revision
+      value: $(params.revision)
+  # - name: fetch-repo
+  #   taskRef:
+  #     name: git-clone
+  #   workspaces:
+  #   - name: output
+  #     workspace: ws
+  #     subPath: aos-cd-jobs
+  #   params:
+  #   - name: url
+  #     value: $(params.repo-url)
+  #   - name: revision
+  #     value: $(params.branch-name)
+  # - name: apply-pipeline-resources
+  #   runAfter: ["fetch-repo"]  # Wait until the clone is done before reading the readme.
+  #   workspaces:
+  #   - name: source
+  #     workspace: aos-cd-jobs
+  #   taskSpec:
+  #     workspaces:
+  #     - name: source
+  #       workspace: ws
+  #       #subPath: aos-cd-jobs
+  #     steps:
+  #     - image: zshusers/zsh:4.3.15
+  #       script: |
+  #         #!/usr/bin/env zsh
+  #         cat $(workspaces.source.path)/README.md

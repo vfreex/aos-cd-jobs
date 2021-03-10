@@ -1,3 +1,5 @@
 Jinja2
 jira
 toml
+pygit2
+openshift
