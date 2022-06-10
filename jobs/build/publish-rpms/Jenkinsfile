@@ -30,10 +30,14 @@ node {
                         description: 'Target release version',
                         trim: true,
                     ),
+                    booleanParam(
+                        name: "DRY_RUN",
+                        description: "Take no action, just echo what the job would have done.",
+                        defaultValue: false
+                    ),
                     commonlib.mockParam(),
                 ]
             ],
-            disableConcurrentBuilds()
         ]
     )
     commonlib.checkMock()
