@@ -15,7 +15,7 @@ node {
         versionJobs["run-v${version}"] = {
             try {
                 timeout(activity: true, time: 10, unit: 'MINUTES') {
-                    build job: '../aos-cd-builds/build%2Freview-cvp', parameters: [string(name: 'VERSION', value: "${cv}")], propagate: false
+                    build job: '../aos-cd-builds/build%2Freview-cvp', parameters: [string(name: 'VERSION', value: "${cv}")], propagate: true
                 }
             } catch (te) {
                 slacklib.to(cv).failure("Error running review-cvp", te)
