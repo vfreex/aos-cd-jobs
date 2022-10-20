@@ -32,6 +32,12 @@ node {
                         defaultValue: "stream",
                         trim: true,
                     ),
+                    string(
+                        name: 'DOOZER_DATA_PATH',
+                        description: 'ocp-build-data fork to use (e.g. test customizations on your own fork)',
+                        defaultValue: "https://github.com/openshift/ocp-build-data",
+                        trim: true,
+                    ),
                     choice(
                         name: 'RHEL_TARGET',
                         description: 'Target RHEL version. Required even if NVRA is specified.',
@@ -63,7 +69,7 @@ node {
         """
     )
 
-    buildlib.doozer("--working-dir ${DOOZER_WORKING} --group openshift-${version} -r microshift config:plashet --base-dir ${ORG_PLASHET_DIR} --name repos --repo-subdir os -i microshift --arch x86_64 unsigned --arch s390x unsigned --arch ppc64le unsigned --arch aarch64 unsigned from-tags -t rhaos-${version}-rhel-${params.RHEL_TARGET}-candidate NOT_APPLICABLE")
+    buildlib.doozer("--working-dir ${DOOZER_WORKING} --data-path=${params.DOOZER_DATA_PATH} --group openshift-${version} -r microshift config:plashet --base-dir ${ORG_PLASHET_DIR} --name repos --repo-subdir os -i microshift --arch x86_64 unsigned --arch s390x unsigned --arch ppc64le unsigned --arch aarch64 unsigned from-tags -t rhaos-${version}-rhel-${params.RHEL_TARGET}-candidate NOT_APPLICABLE")
 
     sh(
         """
