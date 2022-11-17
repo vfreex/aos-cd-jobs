@@ -123,6 +123,9 @@ async def main():
     }
 
     group_config = await load_group_config(group, assembly)
+    if not group_config.get("assemblies", {}).get("enabled"):
+        assembly = "stream"
+        LOGGER.warning("Assembly name reset to 'stream' because assemblies are not enabled in ocp-build-data.")
     all_repos = group_config.get("repos", {})
     plashet_config = {repo: PLASHET_CONFIG[repo] for repo in PLASHET_CONFIG if repo in all_repos}
 

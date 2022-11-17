@@ -1567,11 +1567,11 @@ def build_plashets(doozerOpts, version, release, dryRun = false) {
     def (major, minor) = commonlib.extractMajorMinorVersionNumbers(version)
 
     // Create plashet repos on ocp-artifacts
-    if (true) {
+    if (major >= 4) {
         def revision = release
         if (revision.endsWith(".p?"))
             revision = revision.substring(0, revision.length() - 3)  // remove .p? suffix
-        def working_dir = "$PWD/plashet-working"
+        def working_dir = "${env.WORKSPACE}/plashet-working"
         cleanWorkdir(working_dir)
         sh "mkdir -p $working_dir"
         def assembly = params.ASSEMBLY ?: "stream"
