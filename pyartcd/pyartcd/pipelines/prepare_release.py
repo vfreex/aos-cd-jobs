@@ -140,33 +140,33 @@ class PrepareReleasePipeline:
             if release_config:
                 advisories = group_config.get("advisories", {}).copy()
 
-            if self.release_version[2] == 0:  # GA release
-                if advisories.get("rpm", 0) <= 0:
-                    advisories["rpm"] = self.create_advisory("RHEA", "rpm", "ga")
-                else:
-                    _LOGGER.info("Reusing existing rpm advisory %s", advisories["rpm"])
-                if advisories.get("image", 0) <= 0:
-                    advisories["image"] = self.create_advisory("RHEA", "image", "ga")
-                else:
-                    _LOGGER.info("Reusing existing image advisory %s", advisories["image"])
-            else:  # z-stream release
-                if advisories.get("rpm", 0) <= 0:
-                    advisories["rpm"] = self.create_advisory("RHBA", "rpm", "standard")
-                else:
-                    _LOGGER.info("Reusing existing rpm advisory %s", advisories["rpm"])
-                if advisories.get("image", 0) <= 0:
-                    advisories["image"] = self.create_advisory("RHBA", "image", "standard")
-                else:
-                    _LOGGER.info("Reusing existing image advisory %s", advisories["image"])
-            if self.release_version[0] > 3:
-                if advisories.get("extras", 0) <= 0:
-                    advisories["extras"] = self.create_advisory("RHBA", "image", "extras")
-                else:
-                    _LOGGER.info("Reusing existing extras advisory %s", advisories["extras"])
-                if advisories.get("metadata", 0) <= 0:
-                    advisories["metadata"] = self.create_advisory("RHBA", "image", "metadata")
-                else:
-                    _LOGGER.info("Reusing existing metadata advisory %s", advisories["metadata"])
+            # if self.release_version[2] == 0:  # GA release
+            #     if advisories.get("rpm", 0) <= 0:
+            #         advisories["rpm"] = self.create_advisory("RHEA", "rpm", "ga")
+            #     else:
+            #         _LOGGER.info("Reusing existing rpm advisory %s", advisories["rpm"])
+            #     if advisories.get("image", 0) <= 0:
+            #         advisories["image"] = self.create_advisory("RHEA", "image", "ga")
+            #     else:
+            #         _LOGGER.info("Reusing existing image advisory %s", advisories["image"])
+            # else:  # z-stream release
+            #     if advisories.get("rpm", 0) <= 0:
+            #         advisories["rpm"] = self.create_advisory("RHBA", "rpm", "standard")
+            #     else:
+            #         _LOGGER.info("Reusing existing rpm advisory %s", advisories["rpm"])
+            #     if advisories.get("image", 0) <= 0:
+            #         advisories["image"] = self.create_advisory("RHBA", "image", "standard")
+            #     else:
+            #         _LOGGER.info("Reusing existing image advisory %s", advisories["image"])
+            # if self.release_version[0] > 3:
+            #     if advisories.get("extras", 0) <= 0:
+            #         advisories["extras"] = self.create_advisory("RHBA", "image", "extras")
+            #     else:
+            #         _LOGGER.info("Reusing existing extras advisory %s", advisories["extras"])
+            #     if advisories.get("metadata", 0) <= 0:
+            #         advisories["metadata"] = self.create_advisory("RHBA", "image", "metadata")
+            #     else:
+            #         _LOGGER.info("Reusing existing metadata advisory %s", advisories["metadata"])
             # microshift advisory is present since 4.12
             if self.release_version >= (4, 12):
                 if advisories.get("microshift", 0) <= 0:
@@ -195,7 +195,7 @@ class PrepareReleasePipeline:
             jira_issues = self.create_release_jira(jira_template_vars)
             jira_issue = jira_issues[0] if jira_issues else None
             jira_issue_key = jira_issue.key if jira_issue else None
-            subtasks = [self._jira_client.get_issue(subtask.key) for subtask in jira_issue.fields.subtasks] if jira_issue else []
+            subtasks = jira_issues[1:] if jira_issues else []
 
         if jira_issue_key:
             _LOGGER.info("Updating Jira ticket status...")
