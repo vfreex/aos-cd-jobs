@@ -249,6 +249,7 @@ def consumer_thread(consumer, request_id):
         print(str(result))
         exit(1)
 
+
 def consumer_start(consumer, request_id):
     t = threading.Thread(target=consumer_thread, args=(consumer, request_id))
     t.start()
