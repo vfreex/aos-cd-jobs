@@ -195,6 +195,9 @@ node {
         // Feature candidates and custom releases and .next "preview" releases use client_type ocp-dev-preview and beta2 signing key.
         client_type = 'ocp-dev-preview'
     }
+    def message_digest_files = []
+    def message_digest_files_multi = []
+    def BASE_SIGNING_STAGING_DIR = "/mnt/nfs/signing_staging/openshift-v4/"
     stage("mirror binaries") {
         if (params.SKIP_MIRROR_BINARIES) {
             echo "Skip mirroring binaries."
@@ -207,10 +210,13 @@ node {
             // Using the real per-arch release name in $info instead of the one defined by release artists.
             def release_name = info.metadata.version
             if (!params.DRY_RUN) {
+                def SIGNING_STAGING_DIR = "${BASE_SIGNING_STAGING_DIR}/${arch}/clients/${client_type}/${release_name}"
                 if (arch != "multi") {
                     release.stagePublishClient(quay_url, dest_release_tag, release_name, arch, client_type)
+                    message_digest_files << "${arch}/clients/${client_type}/${release_name}/sha256sum.txt"
                 } else {
                     release.stagePublishMultiClient(quay_url, dest_release_tag, release_name, client_type)
+                    message_digest_files_multi << "${arch}/clients/${client_type}/${release_name}/sha256sum.txt"
                 }
             } else {
                 echo "[DRY RUN] Would have sync'd client binaries for ${quay_url}:${dest_release_tag} to mirror ${arch}/clients/${client_type}/${release_name}."
@@ -268,22 +274,47 @@ node {
             echo "Signing artifacts is skipped."
             return
         }
+        def release_name = release_info.name
+        def json_digests = []
         release_info.content.each { arch, info ->
-            def payloadDigest = release_info.content[arch].digest
-            // Currently a multi/heterogeneous release payload has a modified release name to workaround a Cincinnati issue.
-            // Using the real per-arch release name in $info instead of the one defined by release artists.
-            def release_name = info.metadata.version
-            echo "Signing $arch"
-            release.signArtifacts(
-                name: release_name,
-                signature_name: "signature-1",
-                dry_run: params.DRY_RUN,
-                env: "prod",
-                key_name: client_type=='ocp'?"redhatrelease2":"beta2",
-                arch: arch,
-                digest: payloadDigest,
-                client_type: client_type,
-                product: "openshift",
+            if (arch == 'multi') return  // multi payload will be handled separately
+            json_digests << "${release_info.content[arch].pullspec} ${release_info.content[arch].digest}"
+        }
+        build(
+            job: "../signing-jobs/signing%2Fsign-artifacts2",
+            // job: "signing%2Fsign-artifacts2",
+            propagate: true,
+            parameters: [
+                booleanParam(name: "DRY_RUN", value: params.DRY_RUN),
+                string(name: "ENV", value: "prod"),
+                string(name: "KEY_NAME", value: client_type=='ocp'?"redhatrelease2":"beta2"),
+                string(name: "PRODUCT", value: "openshift"),
+                string(name: "NAME", value: release_name),
+                string(name: "JSON_DIGESTS", value: json_digests.join(', ')),
+                string(name: "MESSAGE_DIGEST_FILES", value: message_digest_files.join(', ')),
+            ]
+        )
+        if (release_info.content.multi) {
+            // multi payload could have a different release name; e.g. 4.12.1-multi
+            def multi_release_name = release_info.content.multi.metadata.version
+            def multi_json_digests = []
+            multi_json_digests << "${release_info.content.multi.pullspec} ${release_info.content.multi.digest}"
+            release_info.content.multi.manifests.each { arch, info ->
+                multi_json_digests << "${release_info.content.multi.pullspec} ${info.digest}"
+            }
+            build(
+                job: "../signing-jobs/signing%2Fsign-artifacts2",
+                // job: "signing%2Fsign-artifacts2",
+                propagate: true,
+                parameters: [
+                    booleanParam(name: "DRY_RUN", value: params.DRY_RUN),
+                    string(name: "ENV", value: "prod"),
+                    string(name: "KEY_NAME", value: client_type=='ocp'?"redhatrelease2":"beta2"),
+                    string(name: "PRODUCT", value: "openshift"),
+                    string(name: "NAME", value: multi_release_name),
+                    string(name: "JSON_DIGESTS", value: multi_json_digests.join(', ')),
+                    string(name: "MESSAGE_DIGEST_FILES", value: message_digest_files_multi.join(', ')),
+                ]
             )
         }
     }

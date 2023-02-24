@@ -12,7 +12,7 @@ from errata_tool import ErrataConnector
 from doozerlib import assembly, model, util as doozerutil
 from pyartcd import exectools, constants
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 def isolate_el_version_in_release(release: str) -> Optional[int]:
@@ -111,7 +111,7 @@ def get_release_name_for_assembly(group_name: str, releases_config: Dict, assemb
 
 
 async def kinit():
-    logger.info('Initializing ocp-build kerberos credentials')
+    _LOGGER.info('Initializing ocp-build kerberos credentials')
 
     keytab_file = os.getenv('DISTGIT_KEYTAB_FILE', None)
     keytab_user = os.getenv('DISTGIT_KEYTAB_USER', 'exd-ocp-buildvm-bot-prod@IPA.REDHAT.COM')
@@ -129,7 +129,7 @@ async def kinit():
         ]
         await exectools.cmd_assert_async(cmd)
     else:
-        logger.warning('DISTGIT_KEYTAB_FILE is not set. Using any existing kerberos credential.')
+        _LOGGER.warning('DISTGIT_KEYTAB_FILE is not set. Using any existing kerberos credential.')
 
 
 async def branch_arches(group: str, assembly: str, ga_only: bool = False) -> list:
@@ -141,7 +141,7 @@ async def branch_arches(group: str, assembly: str, ga_only: bool = False) -> lis
     :return: A list of the arches built for this branch
     """
 
-    logger.info('Fetching group config for %s', group)
+    _LOGGER.info('Fetching group config for %s', group)
     group_config = await load_group_config(group=group, assembly=assembly)
 
     # Check if arches_override has been specified. This is used in group.yaml
@@ -208,13 +208,13 @@ def is_manual_build() -> bool:
     """
 
     build_user_email = os.getenv('BUILD_USER_EMAIL')
-    logger.info('Found BUILD_USER_EMAIL=%s', build_user_email)
+    _LOGGER.info('Found BUILD_USER_EMAIL=%s', build_user_email)
 
     if build_user_email is not None:
-        logger.info('Considering this a manual build')
+        _LOGGER.info('Considering this a manual build')
         return True
 
-    logger.info('Considering this a scheduled build')
+    _LOGGER.info('Considering this a scheduled build')
     return False
 
 
@@ -230,35 +230,62 @@ async def is_build_permitted(version: str, data_path: str = constants.OCP_BUILD_
 
     # Get 'freeze_automation' flag
     freeze_automation = await get_freeze_automation(version, data_path, doozer_working)
-    logger.info('Group freeze automation flag is set to: "%s"', freeze_automation)
+    _LOGGER.info('Group freeze automation flag is set to: "%s"', freeze_automation)
 
     # Check for frozen automation
     # yaml parses unquoted "yes" as a boolean... accept either
     if freeze_automation in ['yes', 'True']:
-        logger.info('All automation is currently disabled by freeze_automation in group.yml.')
+        _LOGGER.info('All automation is currently disabled by freeze_automation in group.yml.')
         return False
 
     # Check for frozen scheduled automation
     if freeze_automation == "scheduled" and not is_manual_build():
-        logger.info('Only manual runs are permitted according to freeze_automation in group.yml '
-                    'and this run appears to be non-manual.')
+        _LOGGER.info('Only manual runs are permitted according to freeze_automation in group.yml '
+                     'and this run appears to be non-manual.')
         return False
 
     # Check if group can run on weekends
     if freeze_automation == 'weekdays':
         # Manual builds are always permitted
         if is_manual_build():
-            logger.info('Current build is permitted as it has been triggered manually')
+            _LOGGER.info('Current build is permitted as it has been triggered manually')
             return True
 
         # Check current day of the week
         weekday = datetime.today().strftime("%A")
         if weekday in ['Saturday', 'Sunday']:
-            logger.info('Automation is permitted during weekends, and today is %s', weekday)
+            _LOGGER.info('Automation is permitted during weekends, and today is %s', weekday)
             return True
 
-        logger.info('Scheduled builds for %s are permitted only on weekends, and today is %s', version, weekday)
+        _LOGGER.info('Scheduled builds for %s are permitted only on weekends, and today is %s', version, weekday)
         return False
 
     # Fallback to default
     return True
+
+
+async def mirror_to_s3(source: os.PathLike, dest: os.PathLike, exclude: Optional[str], include: Optional[str], dry_run=False):
+    """
+    Copy to AWS S3
+    """
+    cmd = ["aws", "s3", "sync", "--no-progress", "--exact-timestamps"]
+    if exclude is not None:
+        cmd.append(f"--exclude={exclude}")
+    if include is not None:
+        cmd.append(f"--include={include}")
+    if dry_run:
+        cmd.append("--dryrun")
+    cmd.extend(["--", f"{source}", f"{dest}"])
+    await exectools.cmd_assert_async(cmd, env=os.environ.copy())
+
+
+async def mirror_to_google_cloud(source: os.PathLike, dest: os.PathLike, dry_run=False):
+    """
+    Copy to Google Cloud
+    """
+    # -n - no clobber/overwrite; -v - print url of item; -L - write to log for auto re-processing; -r - recursive
+    cmd = ["gsutil", "cp", "-n", "-v", "-r", "--", f"{source}", f"{dest}"]
+    if dry_run:
+        _LOGGER.warning("[DRY RUN] Would have run %s", cmd)
+        return
+    await exectools.cmd_assert_async(cmd, env=os.environ.copy())
