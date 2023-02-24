@@ -59,17 +59,21 @@ node {
                             defaultValue: "",
                             trim: true,
                         ),
-                        string(
+                        text(
                             name: 'JSON_DIGESTS',
-                            description: 'A comma separated list of json digests to sign; format is PULLSPEC DIGEST, PULLSPEC DIGEST, ...',
+                            description: 'List of json digests to sign; Each line contains an entry in the format of PULLSPEC DIGEST',
                             defaultValue: "",
-                            trim: true,
+                        ),
+                        text(
+                            name: 'MESSAGE_DIGEST_FILES',
+                            description: 'List of message digest files to sign; Each line contains an entry; File paths are relative to the signing staging directory.',
+                            defaultValue: "",
                         ),
                         // file(name: 'MESSAGE_DIGEST_FILE', description: 'message digest file to sign'),
-                        base64File(
-                            name: 'MESSAGE_DIGEST_FILE',
-                            description: 'A message digest file to sign',
-                        ),
+                        // base64File(
+                        //     name: 'MESSAGE_DIGEST_FILE',
+                        //     description: 'A message digest file to sign',
+                        // ),
                         separator(name: 'separator-fd608eda-58f5-442c-9765-3203d6abf11a'),
                         commonlib.dryrunParam('Only do dry run test and exit\nDoes not send anything over the bus'),
                         commonlib.mockParam(),
@@ -82,6 +86,13 @@ node {
         commonlib.checkMock()
 
         def buildUserId = (env.BUILD_USER_ID == null) ? "automated-process" : env.BUILD_USER_ID
+        def json_digests = params.JSON_DIGESTS.trim()
+        def message_digest_files = params.MESSAGE_DIGEST_FILES.trim()
+
+        def LOCAL_SIGNATURE_BASE_DIR = "${WORKSPACE}/signatures"
+        def LOCAL_JSON_DIGESTS_DIR = "${LOCAL_SIGNATURE_BASE_DIR}/json_digests"
+        def LOCAL_MESSAGE_DIGESTS_DIR = "${LOCAL_SIGNATURE_BASE_DIR}/message_digests"
+        def BASE_SIGNING_STAGING_DIR = "/mnt/nfs/signing_staging/openshift-v4"
 
         stage("initialize") {
             if (buildUserId == "automated-process") {
@@ -90,9 +101,11 @@ node {
             echo("Submitting ${params.ENV} signing requests as user: ${buildUserId}")
         }
 
-        stage("gen-assembly") {
+        stage("sign-openshift") {
             buildlib.cleanWorkdir("./artcd_working")
             sh "mkdir -p ./artcd_working"
+            sh "rm -rf $LOCAL_SIGNATURE_BASE_DIR && mkdir -p $LOCAL_SIGNATURE_BASE_DIR"
+
             def cmd = [
                 "artcd",
                 "-v",
@@ -109,11 +122,19 @@ node {
                 "--sig-keyname", params.KEY_NAME,
                 "--product", params.PRODUCT,
                 "--release", params.NAME,
+                "--out-dir", LOCAL_JSON_DIGESTS_DIR,
             ]
-            if (params.JSON_DIGESTS) {
-                for (json_digest in params.JSON_DIGESTS.split("[,]+")) {
+            if (json_digests) {
+                for (json_digest in json_digests.split("[,\n]+")) {
                     cmd << "--json-digest"
                     cmd.addAll(json_digest.trim().split("[\\s]+"))
+                }
+            }
+            if (message_digests) {
+                for (file_path in message_digest_files.split("[,\n]+")) {
+                    def in_file = "${BASE_SIGNING_STAGING_DIR}/${file_path}"
+                    def out_file = "${LOCAL_MESSAGE_DIGESTS_DIR}/${file_path}/${message_digest}.gpg"
+                    cmd << "--message-digest" << in_file << out_file
                 }
             }
             def ssl_cert_id = params.ENV == "prod" ? "0xffe0b38-openshift-art-bot" : "0xffe0b39-nonprod-openshift-art-bot"
@@ -133,6 +154,28 @@ node {
                 }
             }
         }
+        stage("mirror signatures") {
+            // mirror to S3
+            withCredentials([aws(credentialsId: 's3-art-srv-enterprise', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                def mirrorReleasePath = (params.ENV == 'stage') ? 'test' : 'release'
+                sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift/${mirrorReleasePath}/"
+                if (mirrorReleasePath == 'release') {
+                    sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift-release-dev/ocp-release/"
+                    sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift-release-dev/ocp-release-nightly/"
+                }
 
+                def mirrorClientsPath = "openshift-v4"
+                sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256sum.txt.gpg' ${LOCAL_MESSAGE_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/${mirrorClientsPath}/"
+            }
+
+            // mirror to google storage
+            // -n dry run mode
+            // -r recursive
+            // -c to compute and compare checksums
+            def googleStoragePath = (params.ENV == 'stage') ? 'test-1' : 'official'
+            sh "gsutil rsync -n -r -c ${LOCAL_JSON_DIGESTS_DIR}/ gs://openshift-release/${googleStoragePath}/signatures/openshift/release"
+            sh "gsutil rsync -n -r -c gs://openshift-release/${googleStoragePath}/signatures/openshift-release-dev/ocp-release"
+            sh "gsutil rsync -n -r -c gs://openshift-release/${googleStoragePath}/signatures/openshift-release-dev/ocp-release-nightly"
+        }
     }
 }
