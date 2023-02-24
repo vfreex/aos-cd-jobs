@@ -21,3 +21,23 @@ url = "https://issues.redhat.com"
 [jira.templates]
 ocp4 = "ART-4223"
 ocp3 = "ART-4234"
+
+[message_broker.signing_stage]
+host_and_ports = [['umb-broker03.stage.api.redhat.com', 61612], ['umb-broker04.stage.api.redhat.com', 61612]]
+# cert_file = "ssl/nonprod-openshift-art-bot.crt"
+# key_file = "ssl/nonprod-openshift-art-bot.key"
+
+[signing_stage]
+message_broker = "signing_stage"
+send_destination = '/topic/VirtualTopic.eng.art.artifact.sign'
+recv_destination = '/queue/Consumer.nonprod-openshift-art-bot.stage.VirtualTopic.eng.robosignatory.art.sign'
+
+[message_broker.signing]
+host_and_ports = [['umb-broker03.api.redhat.com', 61612], ['umb-broker04.api.redhat.com', 61612]]
+# cert_file = "ssl/openshift-art-bot.crt"
+# key_file = "ssl/openshift-art-bot.key"
+
+[signing]
+message_broker = "signing"
+send_destination = '/topic/VirtualTopic.eng.art.artifact.sign'
+recv_destination = '/queue/Consumer.openshift-art-bot.prod.VirtualTopic.eng.robosignatory.art.sign'
