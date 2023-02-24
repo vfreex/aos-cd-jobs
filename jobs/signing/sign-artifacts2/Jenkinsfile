@@ -130,10 +130,11 @@ node {
                     cmd.addAll(json_digest.trim().split("[\\s]+"))
                 }
             }
-            if (message_digests) {
+            if (message_digest_files) {
                 for (file_path in message_digest_files.split("[,\n]+")) {
+                    file_path = file_path.trim()
                     def in_file = "${BASE_SIGNING_STAGING_DIR}/${file_path}"
-                    def out_file = "${LOCAL_MESSAGE_DIGESTS_DIR}/${file_path}/${message_digest}.gpg"
+                    def out_file = "${LOCAL_MESSAGE_DIGESTS_DIR}/${file_path}.gpg"
                     cmd << "--message-digest" << in_file << out_file
                 }
             }
@@ -146,36 +147,42 @@ node {
                 ]) {
                     cmd << "--ssl-cert" << "${busCertificate}"
                     cmd << "--ssl-key" << "${busKey}"
-                    withFileParameter('MESSAGE_DIGEST_FILE') {
-                        echo "MESSAGE_DIGEST_FILE: $MESSAGE_DIGEST_FILE"
-                        sh 'cat $MESSAGE_DIGEST_FILE'
+                    timeout(time: 10, unit: 'MINUTES') {
+                        commonlib.shell(script: cmd.join(' '))
                     }
-                    commonlib.shell(script: cmd.join(' '))
                 }
             }
         }
         stage("mirror signatures") {
             // mirror to S3
+            def s3_sync_opts = "--no-progress --exact-timestamps"
+            if (params.DRY_RUN) {
+                s3_sync_opts += " --dryrun"  // -n dry run mode
+            }
             withCredentials([aws(credentialsId: 's3-art-srv-enterprise', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                 def mirrorReleasePath = (params.ENV == 'stage') ? 'test' : 'release'
-                sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift/${mirrorReleasePath}/"
+                sh "aws s3 sync ${s3_sync_opts} --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift/${mirrorReleasePath}/"
                 if (mirrorReleasePath == 'release') {
-                    sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift-release-dev/ocp-release/"
-                    sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift-release-dev/ocp-release-nightly/"
+                    sh "aws s3 sync ${s3_sync_opts} --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift-release-dev/ocp-release/"
+                    sh "aws s3 sync ${s3_sync_opts} --exclude='*' --include 'sha256=*' ${LOCAL_JSON_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/openshift-v4/signatures/openshift-release-dev/ocp-release-nightly/"
                 }
 
                 def mirrorClientsPath = "openshift-v4"
-                sh "aws s3 sync --dryrun --no-progress --exact-timestamps --exclude='*' --include 'sha256sum.txt.gpg' ${LOCAL_MESSAGE_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/${mirrorClientsPath}/"
+                sh "aws s3 sync ${s3_sync_opts} --exclude='*' --include='*/sha256sum.txt.gpg' ${LOCAL_MESSAGE_DIGESTS_DIR}/ s3://art-srv-enterprise/pub/${mirrorClientsPath}/"
             }
 
             // mirror to google storage
-            // -n dry run mode
-            // -r recursive
-            // -c to compute and compare checksums
             def googleStoragePath = (params.ENV == 'stage') ? 'test-1' : 'official'
-            sh "gsutil rsync -n -r -c ${LOCAL_JSON_DIGESTS_DIR}/ gs://openshift-release/${googleStoragePath}/signatures/openshift/release"
-            sh "gsutil rsync -n -r -c gs://openshift-release/${googleStoragePath}/signatures/openshift-release-dev/ocp-release"
-            sh "gsutil rsync -n -r -c gs://openshift-release/${googleStoragePath}/signatures/openshift-release-dev/ocp-release-nightly"
+            def gsutil = '/mnt/nfs/home/jenkins/google-cloud-sdk/bin/gsutil'  // doesn't seem to be in path
+            def gsutil_rsync_opts = "-r -c"  // -r recursive; -c to compute and compare checksums
+            if (params.DRY_RUN) {
+                gsutil_rsync_opts += " -n"  // -n dry run mode
+            }
+            timeout(time: 10, unit: 'MINUTES') {
+                sh "${gsutil} rsync ${gsutil_rsync_opts} ${LOCAL_JSON_DIGESTS_DIR}/ gs://openshift-release/${googleStoragePath}/signatures/openshift/release"
+                sh "${gsutil} rsync ${gsutil_rsync_opts} gs://openshift-release/${googleStoragePath}/signatures/openshift-release-dev/ocp-release"
+                sh "${gsutil} rsync ${gsutil_rsync_opts} gs://openshift-release/${googleStoragePath}/signatures/openshift-release-dev/ocp-release-nightly"
+            }
         }
     }
 }
