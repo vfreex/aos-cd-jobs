@@ -203,7 +203,6 @@ node {
         }
         // Remove signing staging directory
         // def BASE_SIGNING_STAGING_DIR = "/mnt/nfs/signing_staging/openshift-v4"
-        sh "rm -rf /mnt/nfs/signing_staging/openshift-v4"
         release_info.content.each { arch, info ->
             echo "Mirroring client binaries for $arch"
             def dest_release_tag = release.destReleaseTag(release_info.name, arch)
@@ -212,11 +211,11 @@ node {
             def release_name = info.metadata.version
             if (!params.DRY_RUN) {
                 // def SIGNING_STAGING_DIR = "${BASE_SIGNING_STAGING_DIR}/${arch}/clients/${client_type}/${release_name}"
-                if (arch != "multi") {
-                    release.stagePublishClient(quay_url, dest_release_tag, release_name, arch, client_type)
-                } else {
-                    release.stagePublishMultiClient(quay_url, dest_release_tag, release_name, client_type)
-                }
+                // if (arch != "multi") {
+                //     release.stagePublishClient(quay_url, dest_release_tag, release_name, arch, client_type)
+                // } else {
+                //     release.stagePublishMultiClient(quay_url, dest_release_tag, release_name, client_type)
+                // }
                 message_digest_files << "${arch}/clients/${client_type}/${release_name}/sha256sum.txt"
             } else {
                 echo "[DRY RUN] Would have sync'd client binaries for ${quay_url}:${dest_release_tag} to mirror ${arch}/clients/${client_type}/${release_name}."
@@ -274,12 +273,14 @@ node {
             echo "Signing artifacts is skipped."
             return
         }
+        def release_name = release_info.name
         def json_digests = []
         release_info.content.each { arch, info ->
             json_digests << "${release_info.content[arch].pullspec} ${release_info.content[arch].digest}"
         }
         build(
-            job: "/signing-jobs/signing%2Fsign-artifacts2",
+            // job: "../signing-jobs/signing%2Fsign-artifacts2",
+            job: "signing%2Fsign-artifacts2",
             propagate: true,
             parameters: [
                 booleanParam(name: "DRY_RUN", value: params.DRY_RUN),
@@ -288,7 +289,7 @@ node {
                 string(name: "PRODUCT", value: "openshift"),
                 string(name: "NAME", value: release_name),
                 string(name: "JSON_DIGESTS", value: json_digests.join('\n')),
-                string(name: "MESSAGE_DIGEST_FILES", value: message_digest_files),
+                string(name: "MESSAGE_DIGEST_FILES", value: message_digest_files.join('\n')),
             ]
         )
     }
