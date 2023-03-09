@@ -115,6 +115,8 @@ class _Listener(stomp.ConnectionListener):
         if fut:
             fut.set_result((message_id, frame.headers, msg))
             del self._futures[request_id]
+        else:
+            self._signatory._conn.nack(message_id, 1)
 
     def on_receipt(self, frame):
         """
@@ -280,7 +282,7 @@ class Signatory:
         artifact_base64 = io.BytesIO()
         base64.encode(artifact, artifact_base64)
         request_id = (
-            f'{product}-{typ}-{datetime.now().strftime("%Y%m%d%H%M%S")}-{uuid.uuid4()}'
+            f'{product}-{typ}-{datetime.utcnow().strftime("%Y%m%d%H%M%S")}-{uuid.uuid4()}'
         )
         message = {
             "artifact": artifact_base64.getvalue().decode(),

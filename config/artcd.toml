@@ -30,7 +30,7 @@ host_and_ports = [['umb-broker03.stage.api.redhat.com', 61612], ['umb-broker04.s
 [signing_stage]
 message_broker = "signing_stage"
 send_destination = '/topic/VirtualTopic.eng.art.artifact.sign'
-recv_destination = '/queue/Consumer.nonprod-openshift-art-bot.stage.VirtualTopic.eng.robosignatory.art.sign'
+recv_destination = '/queue/Consumer.nonprod-openshift-art-bot.artcd-stage.VirtualTopic.eng.robosignatory.art.sign'
 
 [message_broker.signing]
 host_and_ports = [['umb-broker03.api.redhat.com', 61612], ['umb-broker04.api.redhat.com', 61612]]
@@ -40,4 +40,4 @@ host_and_ports = [['umb-broker03.api.redhat.com', 61612], ['umb-broker04.api.red
 [signing]
 message_broker = "signing"
 send_destination = '/topic/VirtualTopic.eng.art.artifact.sign'
-recv_destination = '/queue/Consumer.openshift-art-bot.prod.VirtualTopic.eng.robosignatory.art.sign'
+recv_destination = '/queue/Consumer.openshift-art-bot.artcd.VirtualTopic.eng.robosignatory.art.sign'

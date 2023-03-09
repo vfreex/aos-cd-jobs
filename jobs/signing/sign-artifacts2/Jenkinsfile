@@ -101,7 +101,7 @@ node {
 
             def cmd = [
                 "artcd",
-                "-v",
+                "-vv",
                 "--working-dir=./artcd_working",
                 "--config", "./config/artcd.toml",
             ]
@@ -136,13 +136,14 @@ node {
                 withCredentials([
                     string(credentialsId: 'art-bot-slack-token', variable: 'SLACK_BOT_TOKEN'),
                     file(credentialsId: "${ssl_cert_id}.crt", variable: 'busCertificate'),
-                    file(credentialsId: "${ssl_cert_id}.key", variable: 'busKey')
+                    file(credentialsId: "${ssl_cert_id}.key", variable: 'busKey'),
+                    aws(credentialsId: 's3-art-srv-enterprise', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
                 ]) {
                     cmd << "--ssl-cert" << "${busCertificate}"
                     cmd << "--ssl-key" << "${busKey}"
                     lock("sign-artifacts-lock") {
                         withEnv(["PATH+GSUTIL=/mnt/nfs/home/jenkins/google-cloud-sdk/bin"]) {
-                            timeout(time: 15, unit: 'MINUTES') {
+                            timeout(time: 20, unit: 'MINUTES') {
                                 commonlib.shell(script: cmd.join(' '))
                             }
                         }

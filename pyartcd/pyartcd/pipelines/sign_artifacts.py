@@ -63,7 +63,7 @@ class SignArtifactsPipeline:
         self._logger.info("Signing json digest for payload %s with digest %s...", pullspec, digest)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "wb") as sig_file:
-            if self._dry_run:
+            if self._dry_run and self.env == "prod":
                 self._logger.warning("[DRY RUN] Would have signed the requested artifact.")
             else:
                 await signatory.sign_json_digest(self.product, self.release_name, pullspec, digest, sig_file)
@@ -78,7 +78,7 @@ class SignArtifactsPipeline:
         self._logger.info("Signing message digest file %s...", input_path.absolute())
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(input_path, "rb") as in_file, open(output_path, "wb") as sig_file:
-            if self._dry_run:
+            if self._dry_run and self.env == "prod":
                 self._logger.warning("[DRY RUN] Would have signed the requested artifact.")
             else:
                 await signatory.sign_message_digest(self.product, self.release_name, in_file, sig_file)
