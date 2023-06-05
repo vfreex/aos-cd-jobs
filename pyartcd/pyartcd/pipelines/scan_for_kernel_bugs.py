@@ -71,7 +71,7 @@ class ScanForKernelBugsPipeline:
             "elliott",
             "--group", self.group,
             "--assembly", "stream",
-            "find-bugs:-clones",
+            "find-bugs:kernel-clones",
             "--move",
             "--comment",
         ]
