@@ -499,10 +499,11 @@ class PromotePipeline:
 
         self._logger.info("All artifacts have been successfully signed.")
         self._logger.info("Publishing signatures...")
-        tasks = [
-            self._publish_json_digest_signatures(json_digest_sig_dir),
-            self._publish_message_digest_signatures(message_digest_sig_dir),
-        ]
+        tasks = []
+        if json_digests:
+            tasks.append(self._publish_json_digest_signatures(json_digest_sig_dir))
+        if message_digests:
+            tasks.append(self._publish_message_digest_signatures(message_digest_sig_dir))
         await asyncio.gather(*tasks)
         self._logger.info("All signatures have been published.")
 
