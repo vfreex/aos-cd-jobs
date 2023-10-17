@@ -209,7 +209,9 @@ node('covscan') {
                     string(credentialsId: 'redis-host', variable: 'REDIS_HOST'),
                     string(credentialsId: 'redis-port', variable: 'REDIS_PORT')
                 ]) {
-                    sh(script: cmd.join(' '), returnStdout: true)
+                    withEnv(["TELEMETRY_ENABLED=1"]) {
+                        sh(script: cmd.join(' '), returnStdout: true)
+                    }
                 }
             }
 
