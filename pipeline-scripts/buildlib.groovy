@@ -10,7 +10,13 @@ GITHUB_BASE_PATHS = [:]
 GITHUB_BASE = "git@github.com:openshift"
 
 def initialize(test=false, regAws=false) {
-    this.proxy_setup()
+    def hostname = env['HOSTNAME']
+
+    // Proxy is needed only on PSI RHV
+    if (hostname.indexOf(".hosts.prod.psi.bos.redhat.com") >= 0 || hostname.indexOf(".hosts.prod.psi.rdu2.redhat.com") >= 0) {
+        this.proxy_setup()
+    }
+
     this.setup_venv()
     this.path_setup()
 
