@@ -1,4 +1,4 @@
-node() {
+node {
     checkout scm
     def buildlib = load('pipeline-scripts/buildlib.groovy')
     def commonlib = buildlib.commonlib
@@ -79,7 +79,6 @@ node() {
     def exclude = []
 
     stage('Set build info') {
-        operator_nvrs = commonlib.parseList(params.OPERATOR_NVRS)
         only = commonlib.parseList(params.ONLY)
         exclude = commonlib.parseList(params.EXCLUDE)
         currentBuild.displayName += " (${params.BUILD_VERSION})"
