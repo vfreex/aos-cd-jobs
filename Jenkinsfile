@@ -1,68 +1,239 @@
-// Update-branches job
+// Monitor all branches of ocp-build-data
 
-properties(
-  [
-    disableConcurrentBuilds(),
-    disableResume(),
-    buildDiscarder(
-      logRotator(
-        artifactDaysToKeepStr: '60',
-        daysToKeepStr: '60')
-    ),
-  ]
-)
-
-// https://issues.jenkins-ci.org/browse/JENKINS-33511
-def set_workspace() {
-  if(env.WORKSPACE == null) {
-    env.WORKSPACE = WORKSPACE = pwd()
-  }
+@NonCPS
+def sortedVersions() {
+    // Proceed from newest to oldest to prioritize a functional run on the latest version.
+    return commonlib.ocp4Versions.sort(false).reverse()
 }
 
-node('openshift-build-1') {
-  try {
-    timeout(time: 30, unit: 'MINUTES') {
-      deleteDir()
-      set_workspace()
-      dir('aos-cd-jobs') {
-        stage('clone') {
-          checkout scm
-          sh 'git checkout master'
-        }
-        stage('run') {
-          final url = sh(
-            returnStdout: true,
-            script: 'git config remote.origin.url')
-          if(!(url =~ /^[-\w]+@[-\w]+(\.[-\w]+)*:/)) {
-            error('This job uses ssh keys for auth, please use an ssh url')
-          }
-          def prune = true, key = 'openshift-bot'
-          if(url.trim() != 'git@github.com:openshift-eng/aos-cd-jobs.git') {
-            prune = false
-            key = "${(url =~ /.*:([^\/]+)/)[0][1]}-aos-cd-bot"
-          }
-          sshagent([key]) {
-            sh """\
-python3 -m venv ../env/
-. ../env/bin/activate
-pip install gitpython
-export GIT_PYTHON_TRACE=full
-${prune ? 'python -m aos_cd_jobs.pruner' : 'echo Fork, skipping pruner'}
-python -m aos_cd_jobs.updater
-"""
-          }
-        }
-      }
+node {
+    checkout scm
+    def buildlib = load("pipeline-scripts/buildlib.groovy")
+    def commonlib = buildlib.commonlib
+
+    properties([
+        disableConcurrentBuilds(),
+        disableResume(),
+        buildDiscarder(
+            logRotator(
+                artifactDaysToKeepStr: '20',
+                daysToKeepStr: '20'
+            )
+        ),
+        [
+            $class: 'ParametersDefinitionProperty',
+            parameterDefinitions: [
+                string(
+                    name: "ONLY_RELEASE",
+                    description: "Only run for one version; e.g. 4.7",
+                    defaultValue: "",
+                    trim: true,
+                ),
+                string(
+                    name: 'ONLY_STREAM',
+                    description: 'The name of the stream (not `assembly=stream` but `stream=golang`) from streams.yml that you want to run for. This only works with ONLY_RELEASE, and SKIP_PRS will be set to true.',
+                    defaultValue: "",
+                    trim: true,
+                ),
+                string(
+                    name: "ADD_LABELS",
+                    description: "Space delimited list of labels to add to existing/new PRs",
+                    defaultValue: "",
+                    trim: true,
+                ),
+                string(
+                    name: 'ASSEMBLY',
+                    description: 'The name of an assembly to rebase & build for. If assemblies are not enabled in group.yml, this parameter will be ignored',
+                    defaultValue: "stream",
+                    trim: true,
+                ),
+                [
+                    name: 'SKIP_PRS',
+                    description: 'Skip opening PRs, do everything else',
+                    $class: 'BooleanParameterDefinition',
+                    defaultValue: false
+                ],
+                [
+                    name: 'SKIP_WAITS',
+                    description: 'Skip sleeps',
+                    $class: 'BooleanParameterDefinition',
+                    defaultValue: false
+                ],
+                [
+                    name: 'FORCE_RUN',
+                    description: 'Run even if ocp-build-data appears unchanged',
+                    $class: 'BooleanParameterDefinition',
+                    defaultValue: false
+                ],
+                [
+                    name: 'UPDATE_IMAGES_ONLY_WHEN_MISSING',
+                    description: 'By default, if an image exists, this job does not update it (i.e. doozer runs with --only-if-missing). It would normally be updated by the ocp4 job when the API server successfully builds.',
+                    $class: 'BooleanParameterDefinition',
+                    defaultValue: true
+                ],
+                commonlib.artToolsParam(),
+                commonlib.dryrunParam(),
+                commonlib.mockParam(),
+            ],
+        ]
+    ])
+
+    if (params.ONLY_RELEASE) {
+        for_versions = [ONLY_RELEASE]
+    } else {
+        for_versions = sortedVersions()
     }
-  } catch(err) {
-    mail(
-      to: 'jupierce@redhat.com',
-      from: "aos-cicd@redhat.com",
-      subject: 'aos-cd-jobs-branches job: error',
-      body: """\
-Encountered an error while running the aos-cd-jobs-branches job: ${err}\n\n
-Jenkins job: ${env.BUILD_URL}
-""")
-    throw err
-  }
+
+    if (params.FORCE_RUN) {
+        currentBuild.displayName += " (forced)"
+    }
+
+    def streamParam = ""
+    def skip_prs = params.SKIP_PRS
+    if (params.ONLY_STREAM) {
+        if (!params.ONLY_RELEASE) {
+            error("ONLY_STREAM can only be used with ONLY_RELEASE")
+        }
+        if (!skip_prs) {
+            echo "Setting SKIP_PRS to true because ONLY_STREAM is set"
+            skip_prs = true
+        }
+        streamParam = "--stream ${params.ONLY_STREAM}"
+    }
+
+    buildlib.withAppCiAsArtPublish() {
+        withCredentials([
+            file(credentialsId: 'konflux-gcp-app-creds-prod', variable: 'GOOGLE_APPLICATION_CREDENTIALS'),
+            file(credentialsId: 'konflux-art-images-auth-file', variable: 'KONFLUX_ART_IMAGES_AUTH_FILE'),
+        ]) {
+            // Log in to app.ci's internal registry as we push some images there (registry.ci.openshift.org).
+            sh "oc registry login --registry-config=$KONFLUX_ART_IMAGES_AUTH_FILE"
+
+            // Log in to quay.io with credentials necessary to push to DPTP's QCI registry (quay.io/openshift/ci). QCI
+            // will eventually be the source of truth for images being used by CI workloads instead of app.ci's internal registry.
+            // We support this by mirroring important images directly to QCI.
+            withCredentials([usernamePassword(credentialsId: 'art_to_ci_promotion_robot--qci', usernameVariable: 'QCI_USER', passwordVariable: 'QCI_PASSWORD')]) {
+                sh "oc registry login --registry=quay.io/openshift --auth-basic=$QCI_USER:$QCI_PASSWORD --registry-config=$KONFLUX_ART_IMAGES_AUTH_FILE"
+            }
+
+        for ( String version : for_versions ) {
+            group = "openshift-${version}"
+            echo "Checking group: ${group}"
+            (major, minor) = commonlib.extractMajorMinorVersionNumbers(version)
+
+            sh "rm -rf ${group}"
+            sh "git clone https://github.com/openshift-eng/ocp-build-data --branch ${group} --single-branch --depth 1 ${group}"
+            dir(group) {
+                now_hash = sh(returnStdout: true, script: "git rev-parse HEAD").trim()
+            }
+
+            prev_dir_name = "${group}-prev"
+            dir(prev_dir_name) {  // if there was a previous, it should be here
+                prev_hash = sh(returnStdout: true, script: "git rev-parse HEAD || echo 0").trim()
+            }
+
+            // Ensure that the base image in ocp-private (base image for private release controller / private images)
+            // is kept in sync with public. ART automation updates the public periodically, but it needs to
+            // also keep priv in sync.
+            sh "oc image mirror --registry-config=$KONFLUX_ART_IMAGES_AUTH_FILE registry.ci.openshift.org/ocp/${version}:base registry.ci.openshift.org/ocp-private/${version}-priv:base"
+
+            echo "Current hash: ${now_hash} "
+            echo "Previous hash: ${prev_hash}"
+
+            if (now_hash == prev_hash && !params.FORCE_RUN) {
+                echo "NO changes detected in ocp-build-data group: ${group}"
+                continue
+            }
+
+            echo "Changes detected in ocp-build-data group: ${group}"
+            currentBuild.displayName += " ${version}"
+            if (params.ONLY_STREAM) {
+                currentBuild.displayName += " ${params.ONLY_STREAM}"
+            }
+
+            doozerWorking = "${env.WORKSPACE}/wd-${version}"
+            def doozerOpts = "--working-dir ${doozerWorking} --group ${group} --build-system konflux"
+
+            rc = 0
+            try {
+                sshagent(["openshift-bot"]) {
+                        sh "rm -rf ${doozerWorking}"
+                        buildlib.doozer("${doozerOpts} images:streams gen-buildconfigs ${streamParam} -o ${group}.yaml --apply")
+                        mirror_args = ""
+                        if ( params.UPDATE_IMAGES_ONLY_WHEN_MISSING ) {
+                            mirror_args += "--only-if-missing "
+                        }
+                        buildlib.doozer("${doozerOpts} images:streams mirror ${streamParam} ${mirror_args} --registry-auth $KONFLUX_ART_IMAGES_AUTH_FILE")
+                        buildlib.doozer("${doozerOpts} images:streams start-builds ${streamParam}")
+
+                        if (!params.SKIP_WAITS) {
+                            // Allow the builds to run for about 20 minutes
+                            sleep time: 20, unit: 'MINUTES'
+                        }
+                        // Print out status of builds for posterity
+                        buildlib.doozer("${doozerOpts} images:streams check-upstream")
+
+                        // Open reconciliation PRs
+                        if (skip_prs) {
+                            echo "Skipping opening PRs"
+                        } else {
+                            withCredentials([string(credentialsId: 'openshift-bot-token', variable: 'GITHUB_TOKEN'), string(credentialsId: 'jboss-jira-token', variable: 'JIRA_TOKEN')]) {
+                                if ( (major == 4 && minor >= 12) || major > 4 ) {
+                                    other_args = '--add-label "jira/valid-bug" --add-label "verified"'
+                                    for ( label in params.ADD_LABELS.split() ) {
+                                        other_args += " --add-label '${label}'"
+                                    }
+                                    // Only open PRs on >= 4.6 to leave well enough alone.
+                                    withEnv(["BUILD_URL=${BUILD_URL}"]) {
+                                        rc = sh script:"doozer ${doozerOpts} --assembly stream images:streams prs open --interstitial 840 --add-auto-labels ${other_args} --github-access-token ${GITHUB_TOKEN}", returnStatus: true
+                                    }
+                                    // rc=50 is used to indicate some errors raised during PR openings
+                                    // rc=25 is used to indicate PR openings were skipped and to try again later.
+                                    if ( rc != 0 && rc != 25 && rc != 50) {
+                                        error("Error opening PRs for ${group}: ${rc}")
+                                    }
+                                }
+                            }
+                        }
+                    }
+            } catch ( ex ) {
+                if ( ONLY_RELEASE != "" ) { // If we are just running for one release, allow exception to propagate out
+                    throw ex
+                }
+                // Otherwise, gracefully print exception and continue with other versions.
+                rc = 1
+                echo """
+                An error occurred while running for ${major}.${minor}.
+                ${ex}
+                """
+            } finally {
+                commonlib.safeArchiveArtifacts(["wd-${version}/*.log"])
+                sh "rm -rf ${doozerWorking}"
+            }
+
+            if ( rc == 25 ) {
+                if ( currentBuild.result != "FAILURE" ) { // If there wasn't already a more severe issue, mark as unstable
+                    currentBuild.result = "UNSTABLE"
+                }
+                currentBuild.description += "  ${major}.${minor}-Partial\n"
+                echo "Some PRs were skipped because parent PRs have not merged yet: ${version}."
+                // Do not "mv ${group} ${prev_dir_name}" because we are not done
+            } else if ( rc == 50 ) {
+                currentBuild.result = "FAILURE"
+                currentBuild.description += "  ${major}.${minor}-Completed with errors\n"
+                echo "Some errors were raised during PR openings; please check the logs for details"
+            } else if ( rc != 0 ) {
+                currentBuild.result = "FAILURE"
+                currentBuild.description += "  ${major}.${minor}-Unknown errors\n"
+                echo "Some errors were raised during reconciliation; please check the logs for details"
+            } else {
+                sh "rm -rf ${prev_dir_name}"
+                sh "mv ${group} ${prev_dir_name}"
+            }
+        }
+        }
+    }
+
+    // Do not clean blindly. We need information to persist across runs in order to detect change in ocp-build-data.
+    // buildlib.cleanWorkspace()
 }
