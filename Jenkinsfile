@@ -116,6 +116,9 @@ node {
                 sh "oc registry login --registry=quay.io/openshift --auth-basic=$QCI_USER:$QCI_PASSWORD --registry-config=$KONFLUX_ART_IMAGES_AUTH_FILE"
             }
 
+            // Log in to quay.io/openshift-release-dev to pull Konflux-built images like golang-builder
+            buildlib.registry_quay_dev_login(env.KONFLUX_ART_IMAGES_AUTH_FILE)
+
         for ( String version : for_versions ) {
             group = "openshift-${version}"
             echo "Checking group: ${group}"
